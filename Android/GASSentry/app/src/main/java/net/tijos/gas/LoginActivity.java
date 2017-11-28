@@ -1,0 +1,222 @@
+package net.tijos.gas;
+
+
+import android.app.Activity;
+import android.content.Intent;
+
+import android.os.AsyncTask;
+
+import android.os.Bundle;
+import android.provider.ContactsContract;
+import android.text.TextUtils;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.inputmethod.EditorInfo;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+
+import net.tijos.gas.service.SentryService;
+
+import org.eclipse.paho.client.mqttv3.MqttException;
+
+import java.util.List;
+
+/**
+ * A login screen that offers login via email/password.
+ */
+public class LoginActivity extends Activity {
+
+    /**
+     * Id to identity READ_CONTACTS permission request.
+     */
+    private static final int REQUEST_READ_CONTACTS = 0;
+
+    /**
+     * Keep track of the login task to ensure we can cancel it if requested.
+     */
+    private UserLoginTask mAuthTask = null;
+
+    // UI references.
+    private AutoCompleteTextView mBrokerView;
+    private AutoCompleteTextView mUserNameView;
+    private EditText mPasswordView;
+
+
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_login);
+        // Set up the login form.
+        mBrokerView = (AutoCompleteTextView) findViewById(R.id.broker);
+        mUserNameView = (AutoCompleteTextView) findViewById(R.id.username);
+        mUserNameView.setText("gas/admin");
+        mPasswordView = (EditText) findViewById(R.id.password);
+        mPasswordView.setText("+pG/kyeJBhBo4SL8JoWkYAXvag2vH0p7NNDlmtrTQOQ=");
+        mPasswordView.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView textView, int id, KeyEvent keyEvent) {
+                if (id == R.id.login || id == EditorInfo.IME_NULL) {
+                    attemptLogin();
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        Button mEmailSignInButton = (Button) findViewById(R.id.email_sign_in_button);
+        mEmailSignInButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                attemptLogin();
+            }
+        });
+
+
+        MyApplication app = (MyApplication) getApplication();
+        if (app.getSentry() != null && app.getSentry().isConnect()) {
+            startActivity(new Intent(LoginActivity.this, MainActivity.class));
+            finish();
+        }
+    }
+
+
+    @Override
+    protected void onDestroy() {
+
+        super.onDestroy();
+    }
+
+
+
+
+    /**
+     * Attempts to sign in or register the account specified by the login form.
+     * If there are form errors (invalid email, missing fields, etc.), the
+     * errors are presented and no actual login attempt is made.
+     */
+    private void attemptLogin() {
+        if (mAuthTask != null) {
+            return;
+        }
+
+        // Reset errors.
+        mUserNameView.setError(null);
+        mPasswordView.setError(null);
+
+        // Store values at the time of the login attempt.
+        String broker = mBrokerView.getText().toString();
+        String username = mUserNameView.getText().toString();
+        String password = mPasswordView.getText().toString();
+
+        boolean cancel = false;
+        View focusView = null;
+
+        // Check for a valid password, if the user entered one.
+        if (!TextUtils.isEmpty(password) && !isPasswordValid(password)) {
+            mPasswordView.setError(getString(R.string.error_invalid_password));
+            focusView = mPasswordView;
+            cancel = true;
+        }
+
+        // Check for a valid email address.
+        if (TextUtils.isEmpty(username)) {
+            mUserNameView.setError(getString(R.string.error_field_required));
+            focusView = mUserNameView;
+            cancel = true;
+        }
+
+        if (cancel) {
+            // There was an error; don't attempt login and focus the first
+            // form field with an error.
+            focusView.requestFocus();
+        } else {
+            // Show a progress spinner, and kick off a background task to
+            // perform the user login attempt.
+            mAuthTask = new UserLoginTask(broker, username, password);
+            mAuthTask.execute((Void) null);
+        }
+    }
+
+
+    private boolean isPasswordValid(String password) {
+        //TODO: Replace this with your own logic
+        return password.length() > 4;
+    }
+
+
+    private void addEmailsToAutoComplete(List<String> emailAddressCollection) {
+        //Create adapter to tell the AutoCompleteTextView what to show in its dropdown list.
+        ArrayAdapter<String> adapter =
+                new ArrayAdapter<>(LoginActivity.this,
+                        android.R.layout.simple_dropdown_item_1line, emailAddressCollection);
+
+        mUserNameView.setAdapter(adapter);
+    }
+
+
+    private interface ProfileQuery {
+        String[] PROJECTION = {
+                ContactsContract.CommonDataKinds.Email.ADDRESS,
+                ContactsContract.CommonDataKinds.Email.IS_PRIMARY,
+        };
+
+        int ADDRESS = 0;
+        int IS_PRIMARY = 1;
+    }
+
+    /**
+     * Represents an asynchronous login/registration task used to authenticate
+     * the user.
+     */
+    public class UserLoginTask extends AsyncTask<Void, Void, Boolean> {
+
+        private final String mBroker;
+        private final String mUsername;
+        private final String mPassword;
+
+        UserLoginTask(String broker, String username, String password) {
+            mBroker = broker;
+            mUsername = username;
+            mPassword = password;
+        }
+
+        @Override
+        protected Boolean doInBackground(Void... params) {
+            MyApplication app = (MyApplication) getApplication();
+            SentryService sentry = app.getSentry();
+
+            try {
+                return sentry.connect(mBroker, mUsername, mPassword);
+            } catch (MqttException e) {
+                e.printStackTrace();
+            }
+
+            return false;
+        }
+
+        @Override
+        protected void onPostExecute(final Boolean success) {
+            mAuthTask = null;
+
+            if (success) {
+
+                startActivity(new Intent(LoginActivity.this, MainActivity.class));
+                finish();
+            } else {
+                mPasswordView.setError(getString(R.string.error_incorrect_password));
+                mPasswordView.requestFocus();
+            }
+        }
+
+        @Override
+        protected void onCancelled() {
+            mAuthTask = null;
+        }
+    }
+}
+
