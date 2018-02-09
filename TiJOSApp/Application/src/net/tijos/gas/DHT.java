@@ -71,6 +71,10 @@ public class DHT extends Collector implements Hygrometer, Thermometer, Runnable 
 
 	@Override
 	public void run() {
+		try {
+			Thread.sleep(3000);
+		} catch (InterruptedException e1) {}
+		
 		while (true) {
 			try {
 				dht11.measure();
